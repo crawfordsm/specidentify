@@ -12,6 +12,16 @@ optical spectrographs
 from ._astropy_init import *
 # ----------------------------------------------------------------------------
 
+class SpecError(Exception):
+
+    """Errors involving this package should cause this exception to be raised.
+    """
+    pass
+
+
+
 # For egg_info test builds to pass, put package imports here.
 if not _ASTROPY_SETUP_:
-    pass 
+    from .spectools import *
+    from .guitools import * 
+    from iterfit import *
