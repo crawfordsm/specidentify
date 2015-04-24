@@ -31,13 +31,21 @@ import os
 import sys
 import copy
 import numpy as np
+from astropy.io import fits as pyfits
 
 # Gui library imports
 from PyQt4 import QtGui, QtCore
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT
 
-# Salt imports
+# specreduce imports
+try:
+    from gingatools import GingaImageDisplay
+    have_ginga = True
+except ImportError:
+    have_ginga = False
+
 from guitools import ImageDisplay, MplCanvas
+from guitools import MplCanvas
 
 from PySpectrograph.Spectra import Spectrum, apext
 
@@ -53,7 +61,7 @@ class InterIdentifyWindow(QtGui.QMainWindow):
     def __init__(self, xarr, specarr, slines, sfluxes, ws, hmin=150, wmin=400, mdiff=20,
                  filename=None, res=2.0, dres=0.1, dc=20, ndstep=20, sigma=5, smooth=0, niter=5, istart=None,
                  nrows=1, rstep=100, method='Zeropoint', ivar=None, cmap='gray', scale='zscale', contrast=1.0,
-                 subback=0, textcolor='green', log=None, verbose=True):
+                 subback=0, textcolor='green', log=None, verbose=True, prefer_ginga=True):
         """Default constructor."""
 
         # set up the variables
@@ -90,6 +98,7 @@ class InterIdentifyWindow(QtGui.QMainWindow):
         self.textcolor = textcolor
         self.log = log
         self.verbose = verbose
+        self.prefer_ginga = prefer_ginga
 
         # Setup widget
         QtGui.QMainWindow.__init__(self)
@@ -101,7 +110,11 @@ class InterIdentifyWindow(QtGui.QMainWindow):
         self.setWindowTitle("InterIdentify")
 
         # create the Image page
-        self.imagePage = imageWidget(self.specarr, y1=self.y1, y2=self.y2, hmin=self.hmin, wmin=self.wmin, cmap=self.cmap,
+        if have_ginga and self.prefer_ginga:
+            displayClass = gingaImageWidget
+        else:
+            displayClass = imageWidget
+        self.imagePage = displayClass(self.specarr, y1=self.y1, y2=self.y2, hmin=self.hmin, wmin=self.wmin, cmap=self.cmap,
                                      rstep=self.rstep, name=self.filename, scale=self.scale, contrast=self.contrast, log=self.log)
 
         # set up the arc page
@@ -294,6 +307,7 @@ class imageWidget(QtGui.QWidget):
         self.imdisplay.aspect = 'auto'
         self.imdisplay.loadImage(imarr)
         self.imdisplay.drawImage()
+
         self.y1line, = self.imdisplay.axes.plot(
             [self.x1, self.x2], [self.y1, self.y1], ls='-', color='#00FF00')
         self.y2line, = self.imdisplay.axes.plot(
@@ -370,6 +384,142 @@ class imageWidget(QtGui.QWidget):
         self.y1line.set_ydata([self.y1, self.y1])
         self.y2line.set_ydata([self.y2, self.y2])
         self.imdisplay.draw()
+        self.emit(QtCore.SIGNAL("regionChange(int,int)"), self.y1, self.y2)
+
+    def nextsection(self):
+        self.nrows = int(self.nrValueEdit.text())
+        self.rstep = int(self.nsValueEdit.text())
+        self.y1 = self.y1 + self.rstep
+        self.y2 = self.y1 + self.nrows
+        self.y1ValueEdit.setText('%6i' % self.y1)
+        self.y2ValueEdit.setText('%6i' % self.y2)
+        self.updatesection()
+
+    def runauto(self):
+        if self.log is not None:
+            self.log.message("Running Auto")
+        self.emit(
+            QtCore.SIGNAL("runauto(int, int, int)"),
+            self.y1,
+            self.nrows,
+            self.rstep)
+
+
+class gingaImageWidget(QtGui.QWidget):
+    # ?? Can this be unified with imageWidget?
+
+    def __init__(self, imarr, y1=None, y2=None, nrows=1, rstep=100, hmin=150, wmin=400,
+                 name=None, cmap='Gray', scale='zscale', contrast=0.1, log=None, parent=None):
+        super(gingaImageWidget, self).__init__(parent)
+
+        self.y1 = y1
+        self.y2 = y2
+        self.x1 = 0
+        self.x2 = len(imarr[0])
+        self.nrows = nrows
+        self.rstep = rstep
+        self.log = log
+
+        # Add FITS display widget with mouse interaction and overplotting
+        self.imdisplay = GingaImageDisplay()
+        #self.imdisplay.setMinimumHeight(hmin)
+        #self.imdisplay.setMinimumWidth(wmin)
+        self.imdisplay.configure(wmin, hmin)
+
+        # Set colormap
+        ## self.imdisplay.setColormap(cmap)
+
+        # Set scale mode for dynamic range
+        ## self.imdisplay.scale = scale
+        ## self.imdisplay.contrast = contrast
+        ## self.imdisplay.aspect = 'auto'
+        self.imdisplay.loadImage(imarr)
+        self.imdisplay.drawImage()
+        Line = self.imdisplay.getDrawClass('line')
+        self.y1line = Line(self.x1, self.y1, self.x2, self.y1,
+                           #lines='-',
+                           linewidth=2, color='green')
+        self.imdisplay.add(self.y1line)
+        self.y2line = Line(self.x1, self.y2, self.x2, self.y2,
+                           #ls='-',
+                           linewidth=2, color='green')
+        self.imdisplay.add(self.y2line)
+
+        ## # Add navigation toolbars for each widget to enable zooming
+        ## self.toolbar = NavigationToolbar2QT(self.imdisplay, self)
+
+        # set up the information panel
+        self.infopanel = QtGui.QWidget()
+
+        # add the name of the file
+        self.NameLabel = QtGui.QLabel("Filename:")
+        self.NameLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
+        self.NameValueLabel = QtGui.QLabel("%s" % name)
+        self.NameValueLabel.setFrameStyle(
+            QtGui.QFrame.Panel | QtGui.QFrame.Sunken)
+
+        # add the rows that are extracted
+        self.y1Label = QtGui.QLabel("Y1:")
+        self.y1Label.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
+        self.y1ValueEdit = QtGui.QLineEdit("%6i" % self.y1)
+        self.y2Label = QtGui.QLabel("Y2:")
+        self.y2Label.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
+        self.y2ValueEdit = QtGui.QLineEdit("%6i" % self.y2)
+        self.updateButton = QtGui.QPushButton("Update")
+        self.updateButton.clicked.connect(self.updatesection)
+
+        # add the update for automatically updating it
+        self.nrLabel = QtGui.QLabel("nrows:")
+        self.nrLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
+        self.nrValueEdit = QtGui.QLineEdit("%5i" % self.nrows)
+        self.nsLabel = QtGui.QLabel("rstep:")
+        self.nsLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
+        self.nsValueEdit = QtGui.QLineEdit("%6i" % self.rstep)
+        self.nextButton = QtGui.QPushButton("Next")
+        self.nextButton.clicked.connect(self.nextsection)
+
+        self.autoButton = QtGui.QPushButton("Auto-Identify")
+        self.autoButton.clicked.connect(self.runauto)
+
+        # set up the info panel layout
+        infoLayout = QtGui.QGridLayout(self.infopanel)
+        infoLayout.addWidget(self.NameLabel, 0, 0, 1, 1)
+        infoLayout.addWidget(self.NameValueLabel, 0, 1, 1, 5)
+        infoLayout.addWidget(self.y1Label, 1, 0, 1, 1)
+        infoLayout.addWidget(self.y1ValueEdit, 1, 1, 1, 1)
+        infoLayout.addWidget(self.y2Label, 1, 2, 1, 1)
+        infoLayout.addWidget(self.y2ValueEdit, 1, 3, 1, 1)
+        infoLayout.addWidget(self.updateButton, 1, 4, 1, 1)
+        infoLayout.addWidget(self.nrLabel, 2, 0, 1, 1)
+        infoLayout.addWidget(self.nrValueEdit, 2, 1, 1, 1)
+        infoLayout.addWidget(self.nsLabel, 2, 2, 1, 1)
+        infoLayout.addWidget(self.nsValueEdit, 2, 3, 1, 1)
+        infoLayout.addWidget(self.nextButton, 2, 4, 1, 1)
+        infoLayout.addWidget(self.autoButton, 3, 0, 1, 1)
+
+        # Set up the layout
+        mainLayout = QtGui.QVBoxLayout()
+        mainLayout.addWidget(self.imdisplay.get_widget())
+        ## mainLayout.addWidget(self.toolbar)
+        mainLayout.addWidget(self.infopanel)
+        self.setLayout(mainLayout)
+
+    def updatesection(self):
+        self.y1 = int(self.y1ValueEdit.text())
+        self.y2 = int(self.y2ValueEdit.text())
+        self.nrows = int(self.nrValueEdit.text())
+        self.rstep = int(self.nsValueEdit.text())
+        if abs(self.y1 - self.y2) != self.nrows:
+            if self.log:
+                self.log.warning(
+                    "Warning: Update y2 to increase the row sampling")
+        ## self.y1line.set_ydata([self.y1, self.y1])
+        ## self.y2line.set_ydata([self.y2, self.y2])
+        self.y1line.y1 = self.y1
+        self.y1line.y2 = self.y1
+        self.y2line.y1 = self.y2
+        self.y2line.y2 = self.y2
+        self.imdisplay.redraw(whence=3)
         self.emit(QtCore.SIGNAL("regionChange(int,int)"), self.y1, self.y2)
 
     def nextsection(self):
