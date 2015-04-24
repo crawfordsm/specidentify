@@ -25,3 +25,5 @@ if not _ASTROPY_SETUP_:
     from .spectools import *
     from .guitools import * 
     from iterfit import *
+    from . import models
+
