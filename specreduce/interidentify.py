@@ -31,9 +31,6 @@ import os
 import sys
 import copy
 import numpy as np
-import pyfits
-from pyraf import iraf
-from pyraf.iraf import pysalt
 
 # Gui library imports
 from PyQt4 import QtGui, QtCore
