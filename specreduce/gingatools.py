@@ -7,9 +7,10 @@ from astropy.io import fits as pyfits
 import numpy as np
 
 # Gui library imports
-from ginga import AstroImage, cmap
+from ginga import AstroImage
 from ginga.qtw.ImageViewCanvasQt import ImageViewCanvas as GingaCanvas
 from ginga.misc import log
+
 
 class GingaImageDisplay(GingaCanvas):
     """Class for displaying FITS images using Ginga embedded in a Qt 4 GUI.
@@ -18,7 +19,8 @@ class GingaImageDisplay(GingaCanvas):
     def __init__(self):
         """Default constructor."""
 
-        logger = log.get_logger(log_stderr=True, level=20)
+        #logger = log.get_logger(log_stderr=True, level=20)
+        logger = log.get_logger(null=True)
         
         # Initialize base class
         GingaCanvas.__init__(self, logger=logger)
@@ -33,10 +35,10 @@ class GingaImageDisplay(GingaCanvas):
 
         self.set_drawtype('line', color='green', cap='ball',
                           linewidth=2)
-        self.add_callback('draw-event', self.draw_cb)
-        self.add_callback('edit-event', self.edit_cb)
+        #self.add_callback('draw-event', self.draw_cb)
+        #self.add_callback('edit-event', self.edit_cb)
         self.add_callback('drag-drop', self.drop_file)
-        self.add_callback('cursor-down', self.btndown_cb)
+        #self.add_callback('cursor-down', self.btndown_cb)
         
     ## def onButtonPress(self, event):
     ##     """Emit signal on selecting valid image position."""
@@ -45,15 +47,16 @@ class GingaImageDisplay(GingaCanvas):
     ##         self.emit(QtCore.SIGNAL("positionSelected(float, float)"), 
     ##                   float(event.xdata), float(event.ydata))
 
-    def setColormap(self, cmap_name):
+    def setColorMap(self, cmap_name):
         """Set colormap based on name."""
         try:
-            self.ginga.set_color_map(cmap_name)
-        except:
-            raise SpecError('Cannot get colormap instance for specified cmap')
+            self.set_color_map(cmap_name)
+        except Exception as e:
+            raise ValueError('Cannot get colormap instance for specified cmap: %s' % (
+                str(e)))
 
-    def setScale(self):
-        pass
+    def setScale(self, algname, **params):
+        self.set_autocut_params(algname, **params)
     
     def loadImage(self, data_np):
         """Load image array."""
@@ -155,7 +158,7 @@ class GingaImageDisplay(GingaCanvas):
 
     def draw_cb(self, canvas, tag):
         obj = canvas.getObjectByTag(tag)
-        # ? draw new lines on image
+        # <-- obj drawn by user 
         return True
 
     def edit_cb(self, canvas, obj):
@@ -168,31 +171,8 @@ class GingaImageDisplay(GingaCanvas):
         return True
 
     def redraw_canvas(self,keepzoom=False):
+        # in ginga this is a nop because it keeps track of redrawing screen
         pass
     
-    ## def redraw_canvas(self, keepzoom=False):
-    ##     if keepzoom:
-    ##         # Store current zoom level
-    ##         xmin, xmax = self.axes.get_xlim()
-    ##         ymin, ymax = self.axes.get_ylim()
-
-    ##     # Clear plot
-    ##     self.axes.clear()
-
-    ##     # Draw image
-    ##     self.drawImage()
-
-    ##     # Draw patches
-    ##     for key in self.patches.keys():
-    ##         self.axes.add_patch(self.patches[key])
-
-    ##     if keepzoom:
-    ##         # Restore zoom level
-    ##         self.axes.set_xlim((xmin,xmax))
-    ##         self.axes.set_ylim((ymin,ymax))
-
-    ##     # Force redraw
-    ##     self.draw()
-
     # add some dummpy matplotlib compatibility methods here?
     
