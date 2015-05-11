@@ -53,12 +53,13 @@ import WavelengthSolution
 import spectools as st
 #import AutoIdentify as ai
 
+from . import SpecError
 
 class InterIdentifyWidget(QtGui.QWidget):
 
     """InterIdentify widget."""
 
-    def __init__(self, xarr, specarr, slines, sfluxes, ws, hmin=150, wmin=400, mdiff=20,
+    def __init__(self, xarr, specarr, slines, sfluxes, ws, hmin=150, wmin=400, mdiff=20, wdiff=20,
                  filename=None, res=2.0, dres=0.1, dc=20, ndstep=20, sigma=5, smooth=0, niter=5, istart=None,
                  nrows=1, rstep=100, method='Zeropoint', ivar=None, cmap='gray', scale='zscale', contrast=1.0,
                  subback=0, textcolor='green', log=None, verbose=True, prefer_ginga=True):
@@ -83,6 +84,7 @@ class InterIdentifyWidget(QtGui.QWidget):
         self.res = res
         self.dres = dres
         self.mdiff = mdiff
+        self.wdiff = wdiff
         self.sigma = sigma
         self.niter = int(niter)
         self.nrows = nrows
@@ -117,7 +119,7 @@ class InterIdentifyWidget(QtGui.QWidget):
         # set up variables
         self.arcdisplay = ArcDisplay(xarr, self.farr, slines, sfluxes, self.ws, specarr=self.specarr,
                                      res=self.res, dres=self.dres, dc=self.dc, ndstep=self.ndstep, xp=[], wp=[],
-                                     method=self.method, smooth=self.smooth, niter=self.niter, mdiff=self.mdiff,
+                                     method=self.method, smooth=self.smooth, niter=self.niter, mdiff=self.mdiff, wdiff=self.wdiff,
                                      sigma=self.sigma, textcolor=self.textcolor, log=self.log, verbose=self.verbose)
         self.arcPage = arcWidget(
             self.arcdisplay,
@@ -204,7 +206,7 @@ class InterIdentifyWidget(QtGui.QWidget):
         xp = np.array(self.arcdisplay.xp)
         wp = np.array(self.arcdisplay.wp)
         if len(xp > 0):
-            w = self.arcdisplay.ws.value(xp)
+            w = self.arcdisplay.ws(xp)
             value = (wp - w).std()
 
         if self.log is not None:
@@ -216,10 +218,9 @@ class InterIdentifyWidget(QtGui.QWidget):
         nws = copy.deepcopy(self.ws)
         if len(xp > 0):
             nws = WavelengthSolution.WavelengthSolution(
-                self.ws.x_arr,
-                self.ws.w_arr,
-                order=self.ws.order,
-                function=self.ws.function)
+                self.ws.x,
+                self.ws.wavelength, 
+                self.ws.model)
             try:
                 nws.fit()
             except Exception as e:
@@ -238,10 +239,9 @@ class InterIdentifyWidget(QtGui.QWidget):
             i = abs(keys - y).argmin()
             ws = self.ImageSolution[keys[i]]
             nws = WavelengthSolution.WavelengthSolution(
-                ws.x_arr,
-                ws.w_arr,
-                order=ws.order,
-                function=ws.function)
+                ws.x,
+                ws.wavelength, 
+                ws.model)
             nws.fit()
             return nws
         except:
@@ -260,7 +260,7 @@ class InterIdentifyWindow(QtGui.QMainWindow):
 
     """Main application window."""
 
-    def __init__(self, xarr, specarr, slines, sfluxes, ws, hmin=150, wmin=400, mdiff=20,
+    def __init__(self, xarr, specarr, slines, sfluxes, ws, hmin=150, wmin=400, mdiff=20, wdiff=20,
                  filename=None, res=2.0, dres=0.1, dc=20, ndstep=20, sigma=5, smooth=0, niter=5, istart=None,
                  nrows=1, rstep=100, method='Zeropoint', ivar=None, cmap='gray', scale='zscale', contrast=1.0,
                  subback=0, textcolor='green', log=None, verbose=True, prefer_ginga=True):
@@ -271,7 +271,7 @@ class InterIdentifyWindow(QtGui.QMainWindow):
 
         # Set main widget
         self.main = InterIdentifyWidget(xarr, specarr, slines, sfluxes, ws,
-                                        hmin=150, wmin=400, mdiff=20,
+                                        hmin=150, wmin=400, mdiff=mdiff, wdiff=wdiff,
                                         filename=filename, res=res, dres=dres, dc=dc,
                                         ndstep=ndstep, sigma=sigma, smooth=smooth,
                                         niter=niter, istart=istart, nrows=nrows,
@@ -616,7 +616,7 @@ class arcWidget(QtGui.QWidget):
         self.x1ValueLabel = QtGui.QLabel("%6.2f" % x1)
         self.x1ValueLabel.setFrameStyle(
             QtGui.QFrame.Panel | QtGui.QFrame.Sunken)
-        w1 = self.arcdisplay.ws.value(x1)
+        w1 = self.arcdisplay.ws(x1)
         self.w1ValueEdit = QtGui.QLineEdit("%6i" % w1)
         self.addButton = QtGui.QPushButton("Add")
         self.addButton.clicked.connect(self.addpoints)
@@ -627,19 +627,19 @@ class arcWidget(QtGui.QWidget):
         self.pixelradio.setChecked(True)
 
         # add in information about the order and type of solution
-        self.funcLabel = QtGui.QLabel("Function:")
-        self.funcLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
-        self.funcComboBox = QtGui.QComboBox()
-        self.funcComboBox.addItems(self.arcdisplay.ws.func_options)
-        self.funcComboBox.setCurrentIndex(
-            self.arcdisplay.ws.func_options.index(
-                self.arcdisplay.ws.function))
+        #self.funcLabel = QtGui.QLabel("Function:")
+        #self.funcLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
+        #self.funcComboBox = QtGui.QComboBox()
+        #self.funcComboBox.addItems(self.arcdisplay.ws.func_options)
+        #self.funcComboBox.setCurrentIndex(
+            #self.arcdisplay.ws.func_options.index(
+                #self.arcdisplay.ws.function))
         # self.funcComboBox."%s" % self.arcdisplay.ws.function)
-        self.orderLabel = QtGui.QLabel("Order:")
-        self.orderLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
-        self.orderValueEdit = QtGui.QLineEdit("%2i" % self.arcdisplay.ws.order)
-        self.updateButton = QtGui.QPushButton("Update")
-        self.updateButton.clicked.connect(self.updatefunction)
+        #self.orderLabel = QtGui.QLabel("Order:")
+        #self.orderLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
+        #self.orderValueEdit = QtGui.QLineEdit("%2i" % self.arcdisplay.ws.order)
+        #self.updateButton = QtGui.QPushButton("Update")
+        #self.updateButton.clicked.connect(self.updatefunction)
 
         # provide a method for automatically fitting the line
         self.methodComboBox = QtGui.QComboBox()
@@ -666,13 +666,13 @@ class arcWidget(QtGui.QWidget):
         infoLayout.addWidget(self.w1Label, 2, 2, 1, 1)
         infoLayout.addWidget(self.w1ValueEdit, 2, 3)
         infoLayout.addWidget(self.addButton, 2, 4, 1, 1)
-        infoLayout.addWidget(self.funcLabel, 3, 0, 1, 1)
-        infoLayout.addWidget(self.funcComboBox, 3, 1, 1, 1)
-        infoLayout.addWidget(self.orderLabel, 3, 2, 1, 1)
-        infoLayout.addWidget(self.orderValueEdit, 3, 3, 1, 1)
-        infoLayout.addWidget(self.updateButton, 3, 4, 1, 1)
-        infoLayout.addWidget(self.methodComboBox, 4, 0, 1, 1)
-        infoLayout.addWidget(self.runButton, 4, 1, 1, 1)
+        #infoLayout.addWidget(self.funcLabel, 3, 0, 1, 1)
+        #infoLayout.addWidget(self.funcComboBox, 3, 1, 1, 1)
+        #infoLayout.addWidget(self.orderLabel, 3, 2, 1, 1)
+        #infoLayout.addWidget(self.orderValueEdit, 3, 3, 1, 1)
+        #infoLayout.addWidget(self.updateButton, 3, 4, 1, 1)
+        #infoLayout.addWidget(self.methodComboBox, 4, 0, 1, 1)
+        #infoLayout.addWidget(self.runButton, 4, 1, 1, 1)
         infoLayout.addWidget(self.saveButton, 4, 4, 1, 1)
         # infoLayout.addWidget(self.pixelradio, 3, 0, 1, 2)
         # infoLayout.addWidget(self.wavelengthradio, 3, 2, 1, 2)
@@ -692,10 +692,10 @@ class arcWidget(QtGui.QWidget):
             self.arcdisplay,
             QtCore.SIGNAL('updatex(float)'),
             self.updatexlabel)
-        self.connect(
-            self.funcComboBox,
-            QtCore.SIGNAL('activated(QString)'),
-            self.updatefunction)
+        #self.connect(
+        #    self.funcComboBox,
+        #    QtCore.SIGNAL('activated(QString)'),
+        #    self.updatefunction)
         self.connect(
             self.methodComboBox,
             QtCore.SIGNAL('activated(QString)'),
@@ -708,7 +708,7 @@ class arcWidget(QtGui.QWidget):
     def updatexlabel(self, value):
         try:
             self.x1ValueLabel.setText("%6.2f" % value)
-            self.w1ValueEdit.setText("%6.2f" % self.arcdisplay.ws.value(value))
+            self.w1ValueEdit.setText("%6.2f" % self.arcdisplay.ws(value))
         except TypeError:
             pass
 
@@ -722,10 +722,11 @@ class arcWidget(QtGui.QWidget):
 
     def updatefunction(self):
         """Update the values for the function"""
-        self.arcdisplay.ws.order = int(self.orderValueEdit.text())
-        self.arcdisplay.ws.function = self.funcComboBox.currentText()
-        self.arcdisplay.ws.set_func()
-        self.arcdisplay.findfit()
+        return
+        #self.arcdisplay.ws.order = int(self.orderValueEdit.text())
+        #self.arcdisplay.ws.function = self.funcComboBox.currentText()
+        #self.arcdisplay.ws.set_func()
+        #self.arcdisplay.findfit()
 
     def updatemethod(self):
         """Update the values for the method for autoidenitfy"""
@@ -767,16 +768,15 @@ class errWidget(QtGui.QWidget):
             QtGui.QFrame.Panel | QtGui.QFrame.Sunken)
 
         # add in the rejection parameters
-        self.sigmaLabel = QtGui.QLabel("Sigma:")
-        self.sigmaLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
-        self.sigmaValueEdit = QtGui.QLineEdit(
-            "%2.1f" %
-            self.arcdisplay.ws.thresh)
-        self.niterLabel = QtGui.QLabel("Niter:")
-        self.niterLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
-        self.niterValueEdit = QtGui.QLineEdit("%i" % self.arcdisplay.ws.niter)
-        self.rejectButton = QtGui.QPushButton("Reject")
-        self.rejectButton.clicked.connect(self.rejectpoints)
+        #self.sigmaLabel = QtGui.QLabel("Sigma:")
+        #self.sigmaLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
+        #self.sigmaValueEdit = QtGui.QLineEdit(
+            #"%2.1f" % self.arcdisplay.ws.thresh)
+        #self.niterLabel = QtGui.QLabel("Niter:")
+        #self.niterLabel.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Raised)
+        #self.niterValueEdit = QtGui.QLineEdit("%i" % self.arcdisplay.ws.niter)
+        #self.rejectButton = QtGui.QPushButton("Reject")
+        #self.rejectButton.clicked.connect(self.rejectpoints)
 
         # add the labels for the results
         self.aveLabel = QtGui.QLabel("Average:")
@@ -798,11 +798,11 @@ class errWidget(QtGui.QWidget):
         infoLayout.addWidget(self.aveValueLabel, 1, 1)
         infoLayout.addWidget(self.stdLabel, 1, 2)
         infoLayout.addWidget(self.stdValueLabel, 1, 3)
-        infoLayout.addWidget(self.sigmaLabel, 2, 0)
-        infoLayout.addWidget(self.sigmaValueEdit, 2, 1)
-        infoLayout.addWidget(self.niterLabel, 2, 2)
-        infoLayout.addWidget(self.niterValueEdit, 2, 3)
-        infoLayout.addWidget(self.rejectButton, 2, 4)
+        #infoLayout.addWidget(self.sigmaLabel, 2, 0)
+        #infoLayout.addWidget(self.sigmaValueEdit, 2, 1)
+        #infoLayout.addWidget(self.niterLabel, 2, 2)
+        #infoLayout.addWidget(self.niterValueEdit, 2, 3)
+        #infoLayout.addWidget(self.rejectButton, 2, 4)
 
         # Set up the layout
         mainLayout = QtGui.QVBoxLayout()
@@ -822,7 +822,7 @@ class errWidget(QtGui.QWidget):
         try:
             xp = np.array(self.arcdisplay.xp)
             wp = np.array(self.arcdisplay.wp)
-            w = self.arcdisplay.ws.value(xp)
+            w = self.arcdisplay.ws(xp)
             value = (wp - w).mean()
             self.aveValueLabel.setText("%4.2g" % value)
             value = (wp - w).std()
@@ -843,7 +843,7 @@ class ArcDisplay(QtGui.QWidget):
     """Class for displaying Arc Spectra using matplotlib and embedded in a Qt 4 GUI.
     """
 
-    def __init__(self, xarr, farr, slines, sfluxes, ws, xp=[], wp=[], mdiff=20, specarr=None,
+    def __init__(self, xarr, farr, slines, sfluxes, ws, xp=[], wp=[], mdiff=20, wdiff=20, specarr=None,
                  res=2.0, dres=0.1, dc=20, ndstep=20, sigma=5, smooth=0, niter=5, method='MatchZero',
                  textcolor='green', log=None, verbose=True):
         """Default constructor."""
@@ -875,6 +875,7 @@ class ArcDisplay(QtGui.QWidget):
         self.orig_ws = copy.deepcopy(ws)
         self.specarr = specarr
         self.mdiff = mdiff
+        self.wdiff = wdiff
         self.sigma = sigma
         self.niter = int(niter)
         self.smooth = int(smooth)
@@ -912,10 +913,10 @@ class ArcDisplay(QtGui.QWidget):
             self.farr.max() / self.spectrum.flux.max()
 
         # set up the wavelength solution
-        if self.ws.function == 'line':
-            self.ws.set_xarr(self.xarr)
-            self.ws.farr = self.farr
-            self.ws.spectrum = self.spectrum
+        #if self.ws.function == 'line':
+        #    self.ws.set_xarr(self.xarr)
+        #    self.ws.farr = self.farr
+        #    self.ws.spectrum = self.spectrum
 
         # set up the list of deleted points
         self.dxp = []
@@ -957,7 +958,7 @@ class ArcDisplay(QtGui.QWidget):
         elif event.key == 'c':
             # return the centroid
             if event.xdata:
-                self.log.message(str(event.xdata), with_header=False)
+                if self.log is not None: self.log.message(str(event.xdata), with_header=False)
                 cx = st.mcentroid(
                     self.xarr,
                     self.farr,
@@ -967,7 +968,7 @@ class ArcDisplay(QtGui.QWidget):
         elif event.key == 'x':
             # return the x position
             if event.xdata:
-                self.log.message(str(event.xdata), with_header=False)
+                if self.log is not None: self.log.message(str(event.xdata), with_header=False)
                 self.emit(QtCore.SIGNAL("updatex(float)"), event.xdata)
         elif event.key == 'R':
             # reset the fit
@@ -1063,7 +1064,7 @@ class ArcDisplay(QtGui.QWidget):
     def plotArt(self):
         """Plot the artificial spectrum"""
         self.isArt = True
-        warr = self.ws.value(self.xarr)
+        warr = self.ws(self.xarr)
         asfarr = st.interpolate(
             warr,
             self.swarr,
@@ -1111,12 +1112,12 @@ class ArcDisplay(QtGui.QWidget):
         """Draw image to canvas."""
         if self.xp and self.wp:
             # plot the spectra
-            w = self.ws.value(np.array(self.xp))
+            w = self.ws(np.array(self.xp))
             self.errcurve, = self.erraxes.plot(
                 self.xp, self.wp - w, linewidth=0.5, linestyle='', marker='o', color='b')
         if self.dxp and self.dwp:
             # plot the spectra
-            dw = self.ws.value(np.array(self.dxp))
+            dw = self.ws(np.array(self.dxp))
             self.delerrcurve, = self.erraxes.plot(
                 self.dxp, self.dwp - dw, linewidth=0.5, linestyle='', marker='x', color='b')
 
@@ -1145,13 +1146,13 @@ class ArcDisplay(QtGui.QWidget):
         """Given a set of features, find other features that might
            correspond to those features
         """
-        self.set_wdiff()
+        #self.set_wdiff()
 
         # xp, wp=st.findfeatures(self.xarr, self.farr, self.slines, self.sfluxes,
         # self.ws, mdiff=self.mdiff, wdiff=self.wdiff, sigma=self.sigma,
         # niter=self.niter, sections=3)
         xp, wp = st.crosslinematch(self.xarr, self.farr, self.slines, self.sfluxes, self.ws,
-                                   res=self.res, mdiff=self.mdiff, wdiff=20,
+                                   res=self.res, mdiff=self.mdiff, wdiff=self.wdiff,
                                    sections=self.sections, sigma=self.sigma, niter=self.niter)
         for x, w in zip(xp, wp):
             if w not in self.wp and w > -1:
@@ -1167,7 +1168,7 @@ class ArcDisplay(QtGui.QWidget):
            add it
         """
         cx = st.mcentroid(self.xarr, self.farr, xc=x, xdiff=self.mdiff)
-        w = self.ws.value(cx)
+        w = self.ws(cx)
         d = abs(self.slines - w)
         w = self.slines[d.argmin()]
 
@@ -1218,22 +1219,21 @@ class ArcDisplay(QtGui.QWidget):
         if len(self.xp) < self.ws.order:
             raise SpecError(
                 "Insufficient sources number of points for fit")
-            return
+
         try:
             self.ws = st.findfit(
-                np.array(
-                    self.xp), np.array(
-                    self.wp), ws=self.ws, thresh=self.ws.thresh)
+                np.array( self.xp), np.array( self.wp), ws=self.ws)
         except SpecError as e:
             self.log.warning(e)
             return
 
         del_list = []
-        for i in range(len(self.ws.func.mask)):
-            if self.ws.func.mask[i] == 0:
-                self.deletepoints(self.ws.func.x[i], w=self.ws.func.y[i],
+        s = self.ws.sigma(self.ws.x, self.ws.wavelength)
+        for i in range(len(self.ws.x)):
+            if abs(self.ws.wavelength[i] - self.ws(self.ws.x[i])) > self.sigma*s:
+                self.deletepoints(self.ws.x[i], w=self.ws.wavelength[i],
                                   save=True)
-        self.rms = self.ws.sigma(self.ws.x_arr, self.ws.w_arr)
+        self.rms = self.ws.sigma(self.ws.x, self.ws.wavelength)
         self.redraw_canvas()
 
     def autoidentify(self, rstep=1, istart=None, nrows=1, oneline=True):
@@ -1285,7 +1285,7 @@ class ArcDisplay(QtGui.QWidget):
 
         # assumes you are using the error plot
         if y is not None:
-            w = self.ws.value(np.array(self.xp))
+            w = self.ws(np.array(self.xp))
             norm = self.xarr.max() / abs(self.wp - w).max()
             dist += norm * (self.wp - w - y) ** 2
             # print y, norm, dist.min()
@@ -1315,7 +1315,7 @@ class ArcDisplay(QtGui.QWidget):
 
         dist = (self.dxp - x) ** 2
         if y is not None:
-            w = self.ws.value(np.array(self.dxp))
+            w = self.ws(np.array(self.dxp))
             # dist += (self.dwp-w-y)**2
         in_minw = dist.argmin()
 
@@ -1386,14 +1386,14 @@ class ArcDisplay(QtGui.QWidget):
         self.emit(QtCore.SIGNAL("fitUpdate()"))
 
 
-def InterIdentify(xarr, specarr, slines, sfluxes, ws, mdiff=20, rstep=1, filename=None,
+def InterIdentify(xarr, specarr, slines, sfluxes, ws, mdiff=20, wdiff=20, rstep=1, filename=None,
                   function='poly', order=3, sigma=3, smooth=0, niter=5, res=2, dres=0.1, dc=20, ndstep=20,
                   istart=None, method='Zeropoint', scale='zscale', cmap='gray', contrast=1.0,
                   subback=0, textcolor='green', log=None, verbose=True):
 
     # Create GUI
     App = QtGui.QApplication(sys.argv)
-    aw = InterIdentifyWindow(xarr, specarr, slines, sfluxes, ws, rstep=rstep, mdiff=mdiff, sigma=sigma, niter=niter,
+    aw = InterIdentifyWindow(xarr, specarr, slines, sfluxes, ws, rstep=rstep, mdiff=mdiff, wdiff=wdiff, sigma=sigma, niter=niter,
                              res=res, dres=dres, dc=dc, ndstep=ndstep, istart=istart, method=method, smooth=smooth,subback=subback,
                              cmap=cmap, scale=scale, contrast=contrast, filename=filename, textcolor=textcolor, log=log)
     aw.show()
