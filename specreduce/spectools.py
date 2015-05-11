@@ -10,6 +10,7 @@ S. M. Crawford (SAAO)    1.0        8 Nov 2009
 import copy
 from astropy.io import fits
 import numpy as np
+from scipy import signal
 from scipy import interpolate as scint
 from scipy.ndimage.filters import gaussian_filter1d
 from scipy.optimize import minimize
@@ -19,6 +20,8 @@ import WavelengthSolution
 from PySpectrograph.Spectra import Spectrum, apext, detectlines
 
 import pylab as pl
+
+from . import SpecError
 
 
 
@@ -105,14 +108,14 @@ def findpoints(xarr, farr, sigma, niter, sections=0):
         for i in range(sections):
             x1 = i * nsec
             x2 = x1 + nsec
-            xa = detect_lines(xarr[x1:x2], farr[x1:x2], sigma=sigma,
-                              niter=niter, center=True)
+            xa = detect_lines(xarr[x1:x2], farr[x1:x2], kernal_size=sigma,
+                              center=True)
             if xp is None:
                 xp = xa.copy()
             else:
                 xp = np.concatenate((xp, xa))
     else:
-        xp = detect_lines(xarr, farr, sigma=sigma, niter=niter, center=True)
+        xp = detect_lines(xarr, farr, kernal_size=sigma, center=True)
 
     # create the list of the fluxes for each line
     xc = xp.astype(int)
@@ -151,38 +154,44 @@ def find_peaks(f_arr, sigma, niter, bsigma=None):
     return t + 1
 
 
-def detect_lines(w_arr, f_arr, sigma=3, bsigma=None, niter=5, mask=None,
-                 kern=default_kernal, center=False):
+def detect_lines(x, y, kernal_size=3, centroid_kernal=default_kernal, 
+                 center=False):
     """Detect lines goes through a 1-D spectra and detect peaks
 
-      w_arr--xaxis array (pixels, wavelength, etc)
-      f_arr--yaxis array (flux, counts, etc)
-      sigma--Threshold for detecting sources
-      bsigma--Threshold for determining background statistics
-      niter--iterations to determine background
-      center--return centroids and not pixels
-      mask--Pixels not to use
+    Parameters
+    ----------
+    x: ~numpy.ndarray
+        Array describing the x-position 
+
+    y: ~numpy.ndarray
+        Array describing the counts in each x-position
+
+    kernal_size: int
+        Size for the detection kernal
+
+    centroid_kernal: 
+        Kernal to be used for centroiding
+
+    center: boolean
+        If True, centroid for detected peaks will be calculated
+
+    Returns
+    -------
+    xp: ~numpy.ndarray
+        Array of x-positions of peaks in the spectrum
     """
-    # set up the variables
-    if bsigma is None:
-        bsigma = sigma
-
-    if mask:
-        f_arr = f_arr[mask]
-        w_arr = w_arr[mask]
-
     # find all peaks
-    peaks = find_peaks(f_arr, sigma, niter, bsigma=bsigma)
+    xp = signal.find_peaks_cwt(y, np.array([kernal_size]))
+    xp = np.array(xp)
 
     # set the output values
-    xp = w_arr[peaks]
     if center:
-        xdiff = int(0.5 * len(kern) + 1)
-        x_arr = np.arange(len(w_arr))
+        xdiff = int(0.5 * len(centroid_kernal) + 1)
+        x_arr = np.arange(len(x))
         xp = xp * 1.0
-        for i in range(len(peaks)):
-            cmask = (abs(x_arr - peaks[i]) < xdiff)
-            xp[i] = detectlines.centroid(w_arr, f_arr, kern=kern, mask=cmask)
+        for i in range(len(xp)):
+            cmask = (abs(x_arr - xp[i]) < xdiff)
+            xp[i] = detectlines.centroid(x, y, kern=centroid_kernal, mask=cmask)
 
     return xp
 
@@ -237,7 +246,7 @@ def findwavelengthsolution(xarr, farr, sl, sf, ws, mdiff=20, wdiff=20, sigma=5,
     mask = (wp > 0)
     if mask.sum() >= ws.order:
         nws = WavelengthSolution.WavelengthSolution(
-            xp[mask], wp[mask], order=ws.order, function=ws.function)
+            xp[mask], wp[mask], model=ws.model)
         nws.fit()
     else:
         nws = None
@@ -296,7 +305,7 @@ def findmatch(xarr, farr, xp, xf, sl, sf, ws, xlimit=10, wlimit=2):
         for i in xf.argsort()[::-1]:
             cx = mcentroid(xarr, farr, xc=xp[i], xdiff=4)
             if abs(cx - xp[i]) < xlimit:
-                w = wavematch(ws.value(cx), wp, sl)
+                w = wavematch(ws(cx), wp, sl)
                 wp[i] = w
 
     # calculate it using all of the information
@@ -312,7 +321,7 @@ def findmatch(xarr, farr, xp, xf, sl, sf, ws, xlimit=10, wlimit=2):
         for i in range(len(xf)):  # xf.argsort()[::-1]:
             cx = mcentroid(xarr, farr, xc=xp[i], xdiff=4)
             if abs(cx - xp[i]) < xlimit:
-                w = wavematch(nws.value(cx), wp, sl, wlimit=wlimit)
+                w = wavematch(nws(cx), wp, sl, wlimit=wlimit)
                 wp[i] = w
                 px[i] = matchprob(cx, w, xf[i], xp, xf, sl, nws, dw=0.8)
             # print cx, nws.value(cx), wp[i], px[i], xp[i], xf[i]
@@ -333,14 +342,14 @@ def matchprob(x, w, f, xp, xf, sl, ws, dw=5):
         nws = copy.deepcopy(ws)
     except:
         nws = WavelengthSolution.WavelengthSolution(
-            ws.x_arr, ws.w_arr, ws.function, ws.order)
+            ws.x, ws.wavelength, model=ws.model)
         nws.fit()
-    nws.coef[0] = nws.coef[0] - (nws.value(x) - w)
+    nws.coef[0] = nws.coef[0] - (nws(x) - w)
 
     # Now loop through and see how well other objects end up fitting
     # if they are not present or there is problems, reduce the probability
     for i in xf.argsort()[::-1]:
-        dist = abs(sl - nws.value(xp[i]))
+        dist = abs(sl - nws(xp[i]))
         if dist.min() > dw:
             p = p * (1 - 0.1)
         else:
@@ -455,8 +464,8 @@ def findfit(xp, wp, ws=None, **kwargs):
     if ws is None:
         ws = WavelengthSolution.WavelengthSolution(xp, wp, **kwargs)
     else:
-        ws.set_array(xp, wp)
-        ws.set_func()
+        ws.x = xp
+        ws.wavelength = wp
     if len(xp) < ws.order:
         msg = 'Not enough points to determine an accurate fit'
         raise SpecError(msg)
@@ -483,9 +492,9 @@ def findzeropoint(xarr, farr, swarr, sfarr, ws, dc=10, ndstep=20,
 
 
 def xcorfun(p, xarr, farr, swarr, sfarr, interptype, ws):
-    ws.set_coef(p)
+    ws.coef=px
     # set the wavelegnth coverage
-    warr = ws.value(xarr)
+    warr = ws(xarr)
     # resample the artificial spectrum at the same wavelengths as the observed
     # spectrum
     asfarr = interpolate(
@@ -501,13 +510,13 @@ def fitxcor(xarr, farr, swarr, sfarr, ws, interptype='interp', debug=False):
         nws = copy.deepcopy(ws)
     except:
         nws = WavelengthSolution.WavelengthSolution(
-            ws.x_arr, ws.w_arr, ws.function, ws.order)
-        nws.coef.set_coef(ws.coef)
+            ws.x, ws.wavelength, ws.model)
+        nws.coef=ws.coef
 
     res = minimize(xcorfun, nws.coef, method='Nelder-Mead',
                    args=(xarr, farr, swarr, sfarr, interptype, nws))
     bcoef = res['x']
-    nws.set_coef(bcoef)
+    nws.coef=bcoef
     return nws
 
 
@@ -547,8 +556,7 @@ def findxcor(xarr, farr, swarr, sfarr, ws, dcoef=None, ndstep=20, best=False,
         nws = copy.deepcopy(ws)
     except:
         nws = WavelengthSolution.WavelengthSolution(
-            ws.x_arr, ws.w_arr, ws.function, ws.order)
-        nws.coef.set_coef(ws.coef)
+            ws.x, ws.wavelength, ws.model)
 
     # create the range of coefficents
     if dcoef is None:
@@ -560,10 +568,10 @@ def findxcor(xarr, farr, swarr, sfarr, ws, dcoef=None, ndstep=20, best=False,
 
     for i in range(len(dlist)):
         # set the coeficient
-        nws.set_coef(dlist[i])
+        nws.coef=dlist[i]
 
         # set the wavelegnth coverage
-        warr = nws.value(xarr)
+        warr = nws(xarr)
 
         # resample the artificial spectrum at the same wavelengths as the
         # observed spectrum
@@ -578,7 +586,7 @@ def findxcor(xarr, farr, swarr, sfarr, ws, dcoef=None, ndstep=20, best=False,
     # now set the best coefficients
     i = cc_arr.argmax()
     bcoef = dlist[i]
-    nws.set_coef(bcoef)
+    nws.coef=bcoef
     if best:
         return nws
 
@@ -601,12 +609,12 @@ def findxcor(xarr, farr, swarr, sfarr, ws, dcoef=None, ndstep=20, best=False,
             # coef=np.polyfit(dlist[:][j], cc_arr, 2)
             # nws.coef[j]=-0.5*coef[1]/coef[0]
 
-    nws.set_coef(bcoef)
+    nws.coef=bcoef
 
     return nws
 
 
-def useRSSModel(xarr, rss, function='poly', order=3, cfit='both', gamma=0.0):
+def useRSSModel(xarr, rss, model,  gamma=0.0):
     """Returns the wavelength solution using the RSS model for the spectrograph
 
 
@@ -619,11 +627,9 @@ def useRSSModel(xarr, rss, function='poly', order=3, cfit='both', gamma=0.0):
     y = 1e7 * rss.calc_wavelength(alpha, beta + dbeta, gamma=gamma)
 
     # for these models, calculate the wavelength solution
-    ws = findfit(
-        xarr, y, order=order, function=function, sgraph=rss, cfit=cfit)
+    ws = findfit(xarr, y, model=model)
     try:
-        ws = findfit(xarr, y, order=order, function=function, sgraph=rss,
-                     cfit=cfit)
+        ws = findfit(xarr, y, model=model)
     except Exception as e:
         raise SpecError(e)
     return ws
@@ -847,7 +853,7 @@ def crosslinematch(xarr, farr, sl, sf, ws, mdiff=20, wdiff=20, res=2, dres=0.1,
 
     """
     # setup initial wavelength array
-    warr = ws.value(xarr)
+    warr = ws(xarr)
     # detect lines in the input spectrum and identify the peaks and peak values
     xp, xf = findpoints(xarr, farr, sigma, niter, sections=sections)
 
@@ -877,13 +883,13 @@ def crosslinematch(xarr, farr, sl, sf, ws, mdiff=20, wdiff=20, res=2, dres=0.1,
             # ie if it is the third brightest thing in that region, then
             # it should be the third brightest thing
             # also require a good fit between observed and artificial
-            nwarr = nws.value(xarr)
-            nwp = nws.value(xp)
+            nwarr = nws(xarr)
+            nwp = nws(xp)
             d = abs(nwp - sl[i])
             j = d.argmin()
             if d.min() < res:
                 if lineorder(xp, xf, sl, sf, sl[i], xp[j], wdiff, nws) and \
-                   abs(ws.value(xp[j]) - sl[i]) < mdiff:
+                   abs(ws(xp[j]) - sl[i]) < mdiff:
                     xp_list.append(xp[j])
                     wp_list.append(sl[i])
     return np.array(xp_list), np.array(wp_list)
@@ -896,7 +902,7 @@ def lineorder(xp, xf, sl, sf, sw, xb, wdiff, nws):
     """
 
     # first cut the two line list down to the same size
-    mask = abs(nws.value(xp) - sw) < wdiff
+    mask = abs(nws(xp) - sw) < wdiff
     smask = abs(sl - sw) < wdiff
 
     # identify the order of the spectral lines

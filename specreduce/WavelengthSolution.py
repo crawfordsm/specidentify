@@ -1,104 +1,141 @@
 
 import numpy as np
 
-from iterfit import iterfit
-from PySpectrograph.WavelengthSolution.ModelSolution import ModelSolution
+from astropy import modeling as md
+from astropy import stats
+
 
 
 class WavelengthSolution:
 
-    """Wavelength Solution is a task describing the functional form for
-    transforming pixel position to wavelength.  The inputs for this task
-    are the given pixel position and the corresponding wavelength.  The user
-    selects an input functional form and order for that form.  The task then
-    calculates the coefficients for that form.  Possible options for the
-    wavelength solution include polynomial, legendre, spline.
+    """A class describing the solution between x-position and wavelength.
+
+
+    Parameters
+    ----------
+    x: ~numpy.ndarray
+        Array of the x-positions  
+
+    wavelength: ~numpy.ndarray
+        Array of the wavelength at each x-position
+ 
+    model: ~astropy.modeling.models
+        A 1D model describing the transformation between x and wavelength
+
+    Raises
+    ------
+
+    Notes
+    -----
+ 
+    Examples
+    --------
+  
     """
+    
 
-    func_options = ['poly', 'polynomial', 'spline', 'legendre',
-                    'chebyshev', 'model']
 
-    def __init__(self, x, w, function='poly', order=3, niter=5, thresh=3,
-                 sgraph=None, cfit='both', xlen=3162, yval=0):
-        self.sgraph = sgraph
-        self.function = function
-        self.order = order
-        self.niter = niter
-        self.thresh = thresh
-        self.cfit = cfit
-        self.xlen = xlen
-        self.yval = yval
+    def __init__(self, x, wavelength, model):
+        self.x = x
+        self.wavelength = wavelength
+        self.model = model
 
-        self.set_array(x, w)
-        self.set_func()
+    @property
+    def x(self):
+        return self._x
 
-    def set_array(self, x, w):
-        self.x_arr = x
-        self.w_arr = w
+    @x.setter
+    def x(self, value):
+        self._x = value
 
-    def set_thresh(self, thresh):
-        self.thresh = thresh
+    @property
+    def wavelength(self):
+        return self._wavelength
 
-    def set_niter(self, niter):
-        self.niter = niter
+    @wavelength.setter
+    def wavelength(self, value):
+        self._wavelength = value
 
-    def set_func(self):
-        if self.function in [
-                'poly', 'polynomial', 'spline', 'legendre', 'chebyshev']:
-            self.func = iterfit(self.x_arr, self.w_arr,
-                                 function=self.function,
-                                 order=self.order, niter=self.niter,
-                                 thresh=self.thresh)
-        if self.function == 'model':
-            self.func = ModelSolution(self.x_arr, self.w_arr,
-                                      sgraph=self.sgraph, xlen=self.xlen,
-                                      yval=self.yval, order=self.order)
+    @property
+    def model(self):
+        return self._model
 
-    def fit(self):
-        if self.function in [
-                'poly', 'polynomial', 'spline', 'legendre', 'chebyshev']:
-            self.func.iterfit()
-            self.coef = self.func.coef
-        if self.function in ['model']:
-            self.func.fit(cfit=self.cfit)
-            self.coef = np.array([c() for c in self.func.coef])
-        # self.set_coef(coef)
+    @model.setter
+    def model(self, value):
+        #TODO: Add checker that it is an astropy model
+        self._model = value
 
-    def set_coef(self, coef):
-        if self.function in [
-                'poly', 'polynomial', 'spline', 'legendre', 'chebyshev']:
-            self.func.coef = coef
-            self.coef = self.func.coef
-        if self.function in ['model']:
-            for i in range(len(self.func.coef)):
-                self.func.coef[i].set(coef[i])
-            self.coef = np.array([c() for c in self.func.coef])
+    @property
+    def coef(self):
+        return self.model.parameters
 
-    def value(self, x):
-        return self.func(x)
+    @coef.setter
+    def coef(self, value):
+        self.model.parameters = coef
 
-    def invvalue(self, w):
-        """Given a wavelength, return the pixel position
+    @property
+    def order(self):
+        return self.model.degree
+
+
+    def __call__(self, x):
+        return self.model(x)
+
+    def fit(self, niter=5):
+        """Determine the fit of the model to the data points with rejection
+
+        For each iteraction, a weight is calculated based on the distance a source
+        is from the relationship and outliers are rejected.
+
+        Parameters
+        ----------
+        niter: int
+            Number of iteractions for the fit
 
         """
-        return w
+        fitter = md.fitting.LinearLSQFitter()
+        weights = np.ones_like(self.x)
+        for i in range(niter):
+            self.model = fitter(self.model, self.x, self.wavelength, weights=weights)
 
-    def sigma(self, x, y):
-        """Return the RMS of the fit """
+            #caculate the weights based on the median absolute deviation
+            r = (self.wavelength - self.model(self.x))
+            s = stats.mad_std(r)
+            biweight = lambda x: ((1.0 - x ** 2) ** 2.0) ** 0.5
+            if s!=0:
+                weights = 1.0/biweight(r / s)
+            else:
+                weights = np.ones(len(x))
+
+
+    def sigma(self, x, w):
+        """Return the RMS of the fit 
+       
+        Parameters
+        ----------
+        x: ~numpy.ndarray
+            Array of the x-positions  
+        w: ~numpy.ndarray
+            Array of the wavelength-positions  
+
+        Returns
+        -------
+        
+        """
         # if there aren't many data points return the RMS
         if len(x) < 4:
-            sig = (((y - self.value(x)) ** 2).mean()) ** 0.5
+            sigma = (((w - self(x)) ** 2).mean()) ** 0.5
         # Otherwise get the average distance between the 16th and
         # 84th percentiles
         # of the residuals divided by 2
         # This should be less sensitive to outliers
         else:
             # Sort the residuals
-            rsdls = np.sort(y - self.value(x))
+            rsdls = np.sort(w - self(x))
             # Get the correct indices and take their difference
-            sig = (rsdls[int(0.84 * len(rsdls))] -
+            sigma = (rsdls[int(0.84 * len(rsdls))] -
                    rsdls[int(0.16 * len(rsdls))]) / 2.0
-        return sig
+        return sigma
 
     def chisq(self, x, y, err):
         """Return the chi^2 of the fit"""

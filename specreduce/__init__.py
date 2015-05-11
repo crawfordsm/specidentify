@@ -12,6 +12,11 @@ optical spectrographs
 from ._astropy_init import *
 # ----------------------------------------------------------------------------
 
+import sip
+for cl in ('QString', 'QVariant'):
+    sip.setapi(cl, 2)
+
+
 class SpecError(Exception):
 
     """Errors involving this package should cause this exception to be raised.
