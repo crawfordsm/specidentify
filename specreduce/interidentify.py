@@ -964,6 +964,7 @@ class ArcDisplay(QtGui.QWidget):
                     self.farr,
                     xc=event.xdata,
                     xdiff=self.mdiff)
+                print event.xdata, cx, self.mdiff
                 self.emit(QtCore.SIGNAL("updatex(float)"), cx)
         elif event.key == 'x':
             # return the x position
@@ -1077,7 +1078,7 @@ class ArcDisplay(QtGui.QWidget):
 
     def plotDetections(self):
         """Plot the lines that are detected"""
-        xp, xf = st.findpoints(
+        xp, xf = st.find_points(
             self.xarr, self.farr, self.sigma, self.niter, sections=self.sections)
         print xp
         self.axes.plot(xp, xf, ls='', marker='|', ms=20, color='#000000')
