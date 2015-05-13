@@ -78,9 +78,8 @@ def mcentroid(xarr, yarr, kern=default_kernal, xc=None, xdiff=None):
     # interpolate the results
     # imask is used to make sure we are only gettin the
     # center pixels
-    imask = (xarr[mask]-xarr[mask].mean() < 3)
+    imask = (abs(xarr[mask]-xarr[mask].mean()) < 3)
     cx = np.interp(0, warr[imask], xarr[mask][imask])
-
     return cx
 
 
