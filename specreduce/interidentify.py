@@ -964,7 +964,6 @@ class ArcDisplay(QtGui.QWidget):
                     self.farr,
                     xc=event.xdata,
                     xdiff=self.mdiff)
-                print event.xdata, cx, self.mdiff
                 self.emit(QtCore.SIGNAL("updatex(float)"), cx)
         elif event.key == 'x':
             # return the x position
