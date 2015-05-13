@@ -1077,8 +1077,8 @@ class ArcDisplay(QtGui.QWidget):
 
     def plotDetections(self):
         """Plot the lines that are detected"""
-        xp, xf = st.findpoints(
-            self.xarr, self.farr, self.sigma, self.niter, sections=self.sections)
+        xp, xf = st.find_points(
+            self.xarr, self.farr, kernal_size=3, sections=self.sections)
         print xp
         self.axes.plot(xp, xf, ls='', marker='|', ms=20, color='#000000')
 
