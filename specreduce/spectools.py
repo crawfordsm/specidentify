@@ -17,7 +17,7 @@ from scipy.optimize import minimize
 from iterfit import iterfit
 import WavelengthSolution
 
-from PySpectrograph.Spectra import Spectrum, apext, detectlines
+from PySpectrograph.Spectra import Spectrum
 
 import pylab as pl
 
@@ -28,8 +28,7 @@ from . import SpecError
 default_kernal = [0, -1, -2, -3, -2, -1, 0, 1, 2, 3, 2, 1, 0]
 
 
-def mcentroid(xarr, yarr, kern=default_kernal, xc=None, xdiff=None,
-              mode='same'):
+def mcentroid(xarr, yarr, kern=default_kernal, xc=None, xdiff=None):
     """Find the centroid of a line following a similar algorithm as
        the centroid algorithm in IRAF.   xarr and yarr should be an area
        around the desired feature to be centroided.  The default kernal
@@ -39,24 +38,50 @@ def mcentroid(xarr, yarr, kern=default_kernal, xc=None, xdiff=None,
 
        ..math:: \int (I-I_0) f(x-x_0) dx = 0
 
-       These are the following parameters:
-       xarr -- array of x values
-       yarr -- array of y values
-       kern -- kernal to convolve the array with
-       xc   -- initial gues
-       xdiff-- Pixels around xc to use for convolution
-       mode -- Mode of convolution
+    Parameters
+    ----------
+    xarr: numpy.ndarry
+        array of x values
 
-       returns xc
+    yarr: numpy.ndarry
+        array of y values
+
+    kern: numpy.ndarray
+         kernal to convolve the array with.  It has a default shape
+         of [0, -1, -2, -3, -2, -1, 0, 1, 2, 3, 2, 1, 0]
+
+    xc: int
+        Initial guess
+
+    xdiff: int
+        Pixels around xc to use for convolution
+
+
+    Returns
+    -------
+    cx: float
+       Centroided x-value for feature
+
     """
+
     if xdiff < len(kern):
         xdiff = len(kern)
+ 
     if xc is not None and xdiff:
         mask = (abs(xarr - xc) < xdiff)
     else:
         mask = np.ones(len(xarr), dtype=bool)
 
-    return detectlines.centroid(xarr, yarr, kern=kern, mask=mask, mode=mode)
+    # convle the input array with the default kernal
+    warr = np.convolve(yarr[mask], kern, mode='same')
+
+    # interpolate the results
+    # imask is used to make sure we are only gettin the
+    # center pixels
+    imask = (xarr[mask]-xarr[mask].mean() < 3)
+    cx = np.interp(0, warr[imask], xarr[mask][imask])
+
+    return cx
 
 
 def interpolate(x, x_arr, y_arr, type='interp', order=3, left=None,
@@ -98,8 +123,31 @@ def clipstats(yarr, thresh, iter):
     return mean, std
 
 
-def findpoints(xarr, farr, sigma, niter, sections=0):
+def find_points(xarr, farr, kernal_size=3, sections=0):
     """Find all the peaks and the peak flux in a spectrum
+
+    Parameters
+    ----------
+    xarr: numpy.ndarry
+        array of x values
+
+    yarr: numpy.ndarry
+        array of y values
+
+    kernal_size: int
+        size of dection kernal
+ 
+    sections: int
+        Number of sections to divide the image into
+        for detection
+
+    Returns
+    -------
+    xp: numpy.ndarry
+        array of x values for peaks
+
+    fp: numpy.ndarry
+        array of flux values for peaks
 
     """
     if sections:
@@ -108,7 +156,7 @@ def findpoints(xarr, farr, sigma, niter, sections=0):
         for i in range(sections):
             x1 = i * nsec
             x2 = x1 + nsec
-            xa = detect_lines(xarr[x1:x2], farr[x1:x2], kernal_size=sigma,
+            xa = detect_lines(xarr[x1:x2], farr[x1:x2], kernal_size=kernal_size,
                               center=True)
             if xp is None:
                 xp = xa.copy()
@@ -190,8 +238,7 @@ def detect_lines(x, y, kernal_size=3, centroid_kernal=default_kernal,
         x_arr = np.arange(len(x))
         xp = xp * 1.0
         for i in range(len(xp)):
-            cmask = (abs(x_arr - xp[i]) < xdiff)
-            xp[i] = detectlines.centroid(x, y, kern=centroid_kernal, mask=cmask)
+            xp[i] = mcentroid(x, y, kern=centroid_kernal, xdiff=xdiff, xc=x[xp[i]])
 
     return xp
 
@@ -262,7 +309,7 @@ def findfeatures(xarr, farr, sl, sf, ws, mdiff=20, wdiff=20, sigma=5, niter=5,
     """
 
     # detect lines in the input spectrum and identify the peaks and peak values
-    xp, xf = findpoints(xarr, farr, sigma, niter, sections=sections)
+    xp, xf = find_points(xarr, farr, kernal_size=sigma, sections=sections)
 
     # return no solution if no peaks were found
     if len(xp) == 0:
@@ -699,7 +746,7 @@ def readfitslinelist(linelist):
             wave = crval1 + cdelt1 * np.arange(len(shdu[0].data))
 
     # detect lines in the input spectrum and identify the peaks and peak values
-    slines, sfluxes = findpoints(wave, data, 3, 5)
+    slines, sfluxes = find_points(wave, data, kernal_size=3)
     """
     figure(figsize=(8,8), dpi=72)
     axes([0.1, 0.1, 0.8, 0.8])
@@ -855,7 +902,7 @@ def crosslinematch(xarr, farr, sl, sf, ws, mdiff=20, wdiff=20, res=2, dres=0.1,
     # setup initial wavelength array
     warr = ws(xarr)
     # detect lines in the input spectrum and identify the peaks and peak values
-    xp, xf = findpoints(xarr, farr, sigma, niter, sections=sections)
+    xp, xf = find_points(xarr, farr, kernal_size=sigma, sections=sections)
 
     # create an artificial lines for comparison
     lmax = farr.max()
