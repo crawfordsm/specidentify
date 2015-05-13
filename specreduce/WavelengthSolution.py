@@ -105,7 +105,7 @@ class WavelengthSolution:
             if s!=0:
                 weights = 1.0/biweight(r / s)
             else:
-                weights = np.ones(len(x))
+                weights = np.ones(len(self.x))
 
 
     def sigma(self, x, w):
