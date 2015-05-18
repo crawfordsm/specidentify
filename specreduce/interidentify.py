@@ -923,6 +923,7 @@ class ArcDisplay(QtGui.QWidget):
         self.dwp = []
 
         # set up other variables
+        self.ylog = False
         self.isArt = False
         self.isFeature = False
 
@@ -936,14 +937,14 @@ class ArcDisplay(QtGui.QWidget):
         helpoutput = """
  ? - Print this file     q - Quit the program
  c - centroid on line    x - print the current position
- a - Display spectrum    l - display features
+ a - Display spectrum    k - display features
  b - identify features   f - fit solution
  p - print features      P - print solution
  z - zeropoint fit       Z - find zeropoint and dispersion
  r - redraw spectrum     R - reset values
- e - add closest line    L - show detected peaks
+ e - add closest line    K - show detected peaks
  d - delete feature      u - undelete feature
- X - fit full X-cor
+ X - fit full X-cor      l - switch yscale to log
  """
         print helpoutput
 
@@ -1006,6 +1007,9 @@ class ArcDisplay(QtGui.QWidget):
             self.isFeature = True
             self.testfeatures()
         elif event.key == 'l':
+            self.ylog = not self.ylog 
+            self.redraw_canvas()
+        elif event.key == 'k':
             # plot the features from existing list
             if self.isFeature:
                 self.isFeature = False
@@ -1014,7 +1018,7 @@ class ArcDisplay(QtGui.QWidget):
                 self.isFeature = True
                 self.plotFeatures()
                 self.redraw_canvas()
-        elif event.key == 'L':
+        elif event.key == 'K':
             # plot the sources that are detected
             self.plotDetections()
         elif event.key == 'p':
@@ -1354,6 +1358,9 @@ class ArcDisplay(QtGui.QWidget):
         if keepzoom:
             self.axes.set_xlim((self.xmin, self.xmax))
             self.axes.set_ylim((self.ymin, self.ymax))
+  
+        if self.ylog:
+            self.axes.set_yscale('log')
 
         # Force redraw
         self.arcfigure.draw()
