@@ -521,7 +521,37 @@ def findfit(xp, wp, ws=None, **kwargs):
 
 def findzeropoint(xarr, farr, swarr, sfarr, ws, dc=10, ndstep=20,
                   inttype='interp'):
-    """Uses cross-correlation to find the best fitting zeropoint"""
+    """Uses cross-correlation to find the best fitting zeropoint
+
+    Parameters
+    ----------
+    xarr: numpy.ndarry
+        array of x values
+
+    farr: numpy.ndarry
+        array of flux values
+
+    swarr: numpy.ndarry
+        array of wavelengths for known lines
+
+    sfarr: numpy.ndarry
+        array of flux values for known lines
+
+    ws: ~WavelengthSolution.WavelengthSolution
+        wavelength solution transforming between x and wavelength
+
+    dc: float
+        initial guess for range of zeropoint
+
+    ndsteps: int
+        number of steps to search over
+
+    Returns
+    -------
+    ws: ~WavelengthSolution.WavelengthSolution
+        wavelength solution with an updated zeropoint term
+
+    """
 
     # if an initial solution, then cut the template lines to just be the
     # length of the spectrum
@@ -615,7 +645,7 @@ def findxcor(xarr, farr, swarr, sfarr, ws, dcoef=None, ndstep=20, best=False,
     for i in range(len(dlist)):
         # set the coeficient
         nws.coef=dlist[i]
-
+     
         # set the wavelegnth coverage
         warr = nws(xarr)
 
@@ -626,8 +656,7 @@ def findxcor(xarr, farr, swarr, sfarr, ws, dcoef=None, ndstep=20, best=False,
 
         # calculate the correlation value
         cc_arr[i] = ncor(farr, asfarr)
-        if debug:
-            print cc_arr[i], " ".join(["%f" % k for k in dlist[i]])
+        #if debug: print cc_arr[i], " ".join(["%f" % k for k in dlist[i]])
 
     # now set the best coefficients
     i = cc_arr.argmax()
