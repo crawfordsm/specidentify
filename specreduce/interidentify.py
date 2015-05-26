@@ -1156,7 +1156,7 @@ class ArcDisplay(QtGui.QWidget):
         # self.ws, mdiff=self.mdiff, wdiff=self.wdiff, sigma=self.sigma,
         # niter=self.niter, sections=3)
         xp, wp = st.crosslinematch(self.xarr, self.farr, self.slines, self.sfluxes, self.ws,
-                                   res=self.res, mdiff=self.mdiff, wdiff=self.wdiff,
+                                   res=self.sigma*self.res, mdiff=self.mdiff, wdiff=self.wdiff,
                                    sections=self.sections, sigma=self.sigma, niter=self.niter)
         for x, w in zip(xp, wp):
             if w not in self.wp and w > -1:
