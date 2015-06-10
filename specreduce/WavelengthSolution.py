@@ -6,7 +6,7 @@ from astropy import stats
 
 
 
-class WavelengthSolution:
+class WavelengthSolution(object):
 
     """A class describing the solution between x-position and wavelength.
 
@@ -71,7 +71,7 @@ class WavelengthSolution:
 
     @coef.setter
     def coef(self, value):
-        self.model.parameters = coef
+        self._model.parameters = value
 
     @property
     def order(self):

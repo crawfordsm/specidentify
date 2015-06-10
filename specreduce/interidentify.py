@@ -923,6 +923,7 @@ class ArcDisplay(QtGui.QWidget):
         self.dwp = []
 
         # set up other variables
+        self.ylog = False
         self.isArt = False
         self.isFeature = False
 
@@ -936,14 +937,14 @@ class ArcDisplay(QtGui.QWidget):
         helpoutput = """
  ? - Print this file     q - Quit the program
  c - centroid on line    x - print the current position
- a - Display spectrum    l - display features
+ a - Display spectrum    k - display features
  b - identify features   f - fit solution
  p - print features      P - print solution
  z - zeropoint fit       Z - find zeropoint and dispersion
  r - redraw spectrum     R - reset values
- e - add closest line    L - show detected peaks
+ e - add closest line    K - show detected peaks
  d - delete feature      u - undelete feature
- X - fit full X-cor
+ X - fit full X-cor      l - switch yscale to log
  """
         print helpoutput
 
@@ -1006,6 +1007,9 @@ class ArcDisplay(QtGui.QWidget):
             self.isFeature = True
             self.testfeatures()
         elif event.key == 'l':
+            self.ylog = not self.ylog 
+            self.redraw_canvas()
+        elif event.key == 'k':
             # plot the features from existing list
             if self.isFeature:
                 self.isFeature = False
@@ -1014,7 +1018,7 @@ class ArcDisplay(QtGui.QWidget):
                 self.isFeature = True
                 self.plotFeatures()
                 self.redraw_canvas()
-        elif event.key == 'L':
+        elif event.key == 'K':
             # plot the sources that are detected
             self.plotDetections()
         elif event.key == 'p':
@@ -1058,8 +1062,14 @@ class ArcDisplay(QtGui.QWidget):
         """Draw image to canvas."""
 
         # plot the spectra
-        self.spcurve, = self.axes.plot(
-            self.xarr, self.farr, linewidth=0.5, linestyle='-', marker='None', color='b')
+        if self.ylog:
+            farr = 1.0 * self.farr
+            farr[farr<0.01] = 0.01
+            self.spcurve, = self.axes.plot(
+                self.xarr, farr, linewidth=0.5, linestyle='-', marker='None', color='b')
+        else:
+            self.spcurve, = self.axes.plot(
+                self.xarr, self.farr, linewidth=0.5, linestyle='-', marker='None', color='b')
 
     def plotArt(self):
         """Plot the artificial spectrum"""
@@ -1072,6 +1082,8 @@ class ArcDisplay(QtGui.QWidget):
             left=0.0,
             right=0.0)
         asfarr = asfarr * self.farr.max() / asfarr.max()
+        if self.ylog:  
+            asfarr[asfarr<0.01] = 0.01
         self.fpcurve, = self.axes.plot(self.xarr, asfarr, linewidth=0.5, linestyle='-',
                                        marker='None', color='r')
 
@@ -1104,7 +1116,7 @@ class ArcDisplay(QtGui.QWidget):
                 x,
                 f,
                 w,
-                size='small',
+                size='medium',
                 rotation='vertical',
                 color=self.textcolor)
 
@@ -1152,7 +1164,7 @@ class ArcDisplay(QtGui.QWidget):
         # self.ws, mdiff=self.mdiff, wdiff=self.wdiff, sigma=self.sigma,
         # niter=self.niter, sections=3)
         xp, wp = st.crosslinematch(self.xarr, self.farr, self.slines, self.sfluxes, self.ws,
-                                   res=self.res, mdiff=self.mdiff, wdiff=self.wdiff,
+                                   res=self.sigma*self.res, mdiff=self.mdiff, wdiff=self.wdiff,
                                    sections=self.sections, sigma=self.sigma, niter=self.niter)
         for x, w in zip(xp, wp):
             if w not in self.wp and w > -1:
@@ -1354,6 +1366,9 @@ class ArcDisplay(QtGui.QWidget):
         if keepzoom:
             self.axes.set_xlim((self.xmin, self.xmax))
             self.axes.set_ylim((self.ymin, self.ymax))
+  
+        if self.ylog:
+            self.axes.set_yscale('log')
 
         # Force redraw
         self.arcfigure.draw()
