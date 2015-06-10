@@ -1062,8 +1062,14 @@ class ArcDisplay(QtGui.QWidget):
         """Draw image to canvas."""
 
         # plot the spectra
-        self.spcurve, = self.axes.plot(
-            self.xarr, self.farr, linewidth=0.5, linestyle='-', marker='None', color='b')
+        if self.ylog:
+            farr = 1.0 * self.farr
+            farr[farr<0.01] = 0.01
+            self.spcurve, = self.axes.plot(
+                self.xarr, farr, linewidth=0.5, linestyle='-', marker='None', color='b')
+        else:
+            self.spcurve, = self.axes.plot(
+                self.xarr, self.farr, linewidth=0.5, linestyle='-', marker='None', color='b')
 
     def plotArt(self):
         """Plot the artificial spectrum"""
@@ -1076,6 +1082,8 @@ class ArcDisplay(QtGui.QWidget):
             left=0.0,
             right=0.0)
         asfarr = asfarr * self.farr.max() / asfarr.max()
+        if self.ylog:  
+            asfarr[asfarr<0.01] = 0.01
         self.fpcurve, = self.axes.plot(self.xarr, asfarr, linewidth=0.5, linestyle='-',
                                        marker='None', color='r')
 
@@ -1108,7 +1116,7 @@ class ArcDisplay(QtGui.QWidget):
                 x,
                 f,
                 w,
-                size='small',
+                size='medium',
                 rotation='vertical',
                 color=self.textcolor)
 
