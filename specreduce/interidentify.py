@@ -1144,9 +1144,9 @@ class ArcDisplay(QtGui.QWidget):
         """Run the test matching algorithm"""
         self.set_wdiff()
         res = max(self.res * 0.25, 2)
-        xp, wp = st.crosslinematch(self.xarr, self.farr, self.slines, self.sfluxes, self.ws,
-                                   res=res, mdiff=self.mdiff, wdiff=20, sigma=self.sigma,
-                                   niter=self.niter, sections=self.sections)
+        xp, wp = st.nearlinematch(self.xarr, self.farr, self.slines,
+                                  self.sfluxes, self.ws, sigma=self.sigma,
+                                  sections=self.sections)
         for x, w in zip(xp, wp):
             if w not in self.wp and w > -1:
                 self.xp.append(x)

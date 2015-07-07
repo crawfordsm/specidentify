@@ -918,6 +918,23 @@ def writespectrum(spectra, outfile, error=False, ftype=None):
         fout.write('\n')
     fout.close()
 
+def nearlinematch(xarr, farr, sl, sf, ws, sigma=5, sections=3):
+    """Find the neareast line to each peak in xarr
+    """
+    # setup initial wavelength array
+    warr = ws(xarr)
+    # detect lines in the input spectrum and identify the peaks and peak values
+    xp, xf = find_points(xarr, farr, kernal_size=sigma, sections=sections)
+    
+    #set up the wavelength array
+    wp = ws(xp)
+
+    for i in range(len(xp)):
+        j = abs(sl-wp[i]).argmin()
+        wp[i] = sl[j]
+        
+    return xp, wp       
+
 
 def crosslinematch(xarr, farr, sl, sf, ws, mdiff=20, wdiff=20, res=2, dres=0.1,
                    sigma=5, niter=5, dc=20, sections=3):
