@@ -7,7 +7,6 @@ from __future__ import with_statement
 import matplotlib.cm
 
 # General imports
-import pyfits
 import numpy as np
 
 # Gui library imports
@@ -85,7 +84,7 @@ class MplCanvas(FigureCanvas):
 
         self.key_press_id = self.figure.canvas.mpl_connect('key_press_event', self.onKeyPress)
         self.key_release_id = self.figure.canvas.mpl_connect('key_release_event', self.onKeyRelease)
-    
+
     def connectMatplotlibMouseEvents(self):
         """Bind events to event handlers."""
 
@@ -158,7 +157,7 @@ class ImageDisplay(MplCanvas):
         """Emit signal on selecting valid image position."""
 
         if event.xdata and event.ydata:
-            self.emit(QtCore.SIGNAL("positionSelected(float, float)"), 
+            self.emit(QtCore.SIGNAL("positionSelected(float, float)"),
 	            float(event.xdata), float(event.ydata))
 
     def setColormap(self, cmap_name):
@@ -205,7 +204,7 @@ class ImageDisplay(MplCanvas):
         self.patches[label]=patch
 
         self.zorder+=1
-        
+
     def removePatch(self, label):
         """Remove patch instance referenced by *label* from figure."""
 
