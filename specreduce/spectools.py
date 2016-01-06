@@ -162,7 +162,7 @@ def find_points(xarr, farr, kernal_size=3, sections=0):
             else:
                 xp = np.concatenate((xp, xa))
     else:
-        xp = detect_lines(xarr, farr, kernal_size=sigma, center=True)
+        xp = detect_lines(xarr, farr, kernal_size=kernal_size, center=True)
 
     # create the list of the fluxes for each line
     xc = xp.astype(int)
@@ -689,27 +689,6 @@ def findxcor(xarr, farr, swarr, sfarr, ws, dcoef=None, ndstep=20, best=False,
     return nws
 
 
-def useRSSModel(xarr, rss, model,  gamma=0.0):
-    """Returns the wavelength solution using the RSS model for the spectrograph
-
-
-    """
-    d = rss.detector.xbin * rss.detector.pix_size * \
-        (xarr - rss.detector.get_xpixcenter())
-    alpha = rss.alpha()
-    beta = -rss.beta()
-    dbeta = -np.degrees(np.arctan(d / rss.camera.focallength))
-    y = 1e7 * rss.calc_wavelength(alpha, beta + dbeta, gamma=gamma)
-
-    # for these models, calculate the wavelength solution
-    ws = findfit(xarr, y, model=model)
-    try:
-        ws = findfit(xarr, y, model=model)
-    except Exception as e:
-        raise SpecError(e)
-    return ws
-
-
 def readlinelist(linelist):
     """Read in the line lists.  Determine what type of file it is.  The default
        is an ascii file with line and relative intensity.  The other types are
@@ -815,33 +794,6 @@ def readasciilinelist(linelist):
     return slines, sfluxes
 
 
-def getslitsize(slitname, config_file=''):
-    """Return the slit size for a given slit name"""
-    if slitname.strip() == 'PL0060N001':
-        return 0.6
-    if slitname.strip() == 'PL0100N001':
-        return 1.0
-    if slitname.strip() == 'PL0120P001':
-        return 1.2
-    if slitname.strip() == 'PL0125N001':
-        return 1.25
-    if slitname.strip() == 'PL0150N001':
-        return 1.5
-    if slitname.strip() == 'PL0200N001':
-        return 2.0
-    if slitname.strip() == 'PL0300N001':
-        return 3.0
-    if slitname.strip() == 'PL0400N001':
-        return 4.0
-
-    try:
-        return int(slitname.strip())
-    except:
-        pass
-    msg = 'Assuming a slit size of 1.0'
-    return 1.0
-
-
 def makesection(section):
     """Convert a section that is a list of coordinates into
        a list of indices
@@ -865,58 +817,6 @@ def vac2air(w):
        returns wavelength
     """
     return w / (1.0 + 2.735182E-4 + 131.4182 / w ** 2 + 2.76249E8 / w ** 4)
-
-def readspectrum(specfile, stype='continuum', error=True, cols=None,
-                 ftype=None):
-    """Given a specfile, read in the spectra and return a spectrum object
-
-       specfile--file containing the input spectra
-       error--include an error column in the creation of the spectrum object
-       cols--columns or column names for the wavelength, flux, and/or flux
-             error
-       ftype--type of file (ascii or fits)
-
-    """
-
-    # set the ftype for a fits file
-    if ftype is None:
-        if specfile[-5] == '.fits':
-            ftype = 'fits'
-        else:
-            ftype = 'ascii'
-
-    if ftype == 'ascii':
-        if error:
-            if cols is None:
-                cols = (0, 1, 2)
-            warr, farr, farr_err = np.loadtxt(
-                specfile, usecols=cols, unpack=True)
-            spectra = Spectrum.Spectrum(warr, farr, farr_err, stype=stype)
-        else:
-            if cols is None:
-                cols = (0, 1)
-            warr, farr = np.loadtxt(specfile, usecols=cols, unpack=True)
-            spectra = Spectrum.Spectrum(warr, farr, stype=stype)
-    elif ftype == 'fits':
-        message = 'Support for FITS files not provided yet'
-        raise SpecError(message)
-    else:
-        message = 'Support for %s files is not provided'
-        raise SpecError(message)
-
-    return spectra
-
-
-def writespectrum(spectra, outfile, error=False, ftype=None):
-    """Given a spectrum, write it out to a file"""
-    fout = saltio.openascii(outfile, 'w')
-    for i in range(spectra.nwave):
-        fout.write('%8.6f ' % spectra.wavelength[i])
-        fout.write('%8.6e ' % spectra.flux[i])
-        if error:
-            fout.write('%8.6e ' % spectra.var[i])
-        fout.write('\n')
-    fout.close()
 
 
 def crosslinematch(xarr, farr, sl, sf, ws, mdiff=20, wdiff=20, res=2, dres=0.1,
