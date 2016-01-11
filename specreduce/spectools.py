@@ -259,8 +259,8 @@ def flatspectrum(xarr, yarr, mode='mean', thresh=3, iter=5, order=3):
     elif mode == 'poly':
         # calculate the statistics and mask all of the mask with values above
         # these
-        it = interfit(xarr, yarr, function='poly', order=order)
-        it.interfit()
+        it = iterfit(xarr, yarr, function='poly', order=order)
+        it.iterfit()
         sarr = yarr - it(xarr)
     elif mode == 'mask':
         # mask the values
@@ -568,7 +568,7 @@ def findzeropoint(xarr, farr, swarr, sfarr, ws, dc=10, ndstep=20,
 
 
 def xcorfun(p, xarr, farr, swarr, sfarr, interptype, ws):
-    ws.coef=px
+    ws.coef=p
     # set the wavelegnth coverage
     warr = ws(xarr)
     # resample the artificial spectrum at the same wavelengths as the observed
@@ -917,3 +917,89 @@ def boxcar_smooth(spec, smoothwidth):
     smoothed = spec.flux.copy()
     smoothed[(kw / 2):-(kw / 2)] = np.convolve(spec.flux, kernel, mode='valid')
     return smoothed
+
+def getwsfromIS(k, ImageSolution, default_ws=None):
+    """From the imageSolution dictionary, find the ws which is nearest to
+       the value k
+
+    k: int
+         Row to return wavelength solution
+
+    ImageSolution: dict
+         Dictionary of wavelength solutions.  The keys in the dict should 
+         correspond to rows
+  
+    default_ws: None or ~WavelengthSolution.WavelengthSolution 
+         Value to return if no corresponding match in getwsfromIS
+
+    Returns
+    -------
+    ws: ~WavelengthSolution.WavelengthSolution 
+         Wavelength solution for row closest to k
+
+    """
+    if len(ImageSolution) == 0:
+        return default_ws
+    ISkeys = np.array(ImageSolution.keys())
+    ws = ImageSolution[ISkeys[abs(ISkeys - k).argmin()]]
+    if ws is None:
+        dist = abs(ISkeys[0] - k)
+        ws = ImageSolution[ISkeys[0]]
+        for i in ISkeys:
+            if ImageSolution[i] and abs(i - k) < dist:
+                dist = abs(i - k)
+                ws = ImageSolution[i]
+    return ws
+
+def arc_straighten(data, istart, ws, rstep=1):
+    """For a given image, assume that the line given by istart is the fiducial and then calculate
+       the transformation between each line and that line in order to straighten the arc
+
+       Parameters
+       ----------
+       data: ~numpy.ndarray
+           Array contianing arc lines 
+
+       istart: int
+           Row to use as the default row
+
+       ws: ~WavelengthSolution.WavelengthSolution 
+         Initial Wavelength solution
+
+       rstep: int
+         Number of steps to take between each wavelength solution
+
+
+       Returns
+       -------
+       ImageSolution: dict
+           Dict contain a Wavelength solution for each row
+    """
+
+    ImageSolution = {}
+    # now step around the central row
+    k = istart
+    oxarr = np.arange(len(data[k]))
+    ofarr = data[k]
+
+    ws.xarr = oxarr
+    ws.warr = oxarr
+    ws.fit()
+    ImageSolution[k] = ws
+
+    for i in range(rstep, int(0.5 * len(data)), rstep):
+        for k in [istart - i, istart + i]:
+            lws = getwsfromIS(k, ImageSolution)
+            xarr = np.arange(len(data[k]))
+            farr = data[k]
+            nws = fitxcor(
+                xarr,
+                farr,
+                oxarr,
+                ofarr,
+                lws,
+                interptype='interp')
+            ImageSolution[k] = nws
+
+    return ImageSolution
+
