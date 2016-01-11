@@ -1003,3 +1003,39 @@ def arc_straighten(data, istart, ws, rstep=1):
 
     return ImageSolution
 
+
+def wave_map(data, iws):
+    """Produce a wave map where each pixel in data corresponds to a wavelength
+
+    Parameters
+    ----------
+    data: ~numpy.ndarray
+        Array contianing arc lines 
+
+    ImageSolution: dict
+        Dict contain a Wavelength solution for each row
+
+    Returns
+    -------
+    data: ~numpy.ndarray
+        Array contianing wavelengths for each pixel
+    
+    Notes
+    -----
+    At this time, `iws` must have an entry for every row.
+
+    """
+    # set up what we will need
+    wave_map = np.zeros_like(data)
+    keys = np.array(iws.keys())
+    xarr = np.arange(data.shape[1])
+
+    #now run through each and add to the array
+    for i in range(keys.min(), keys.max()):
+        if i in keys:
+           wave_map[i,:]=iws[i](xarr)
+
+    #TODO interpolate between empty rows
+
+    return wave_map
+
