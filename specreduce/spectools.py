@@ -162,7 +162,7 @@ def find_points(xarr, farr, kernal_size=3, sections=0):
             else:
                 xp = np.concatenate((xp, xa))
     else:
-        xp = detect_lines(xarr, farr, kernal_size=sigma, center=True)
+        xp = detect_lines(xarr, farr, kernal_size=kernal_size, center=True)
 
     # create the list of the fluxes for each line
     xc = xp.astype(int)
@@ -259,8 +259,8 @@ def flatspectrum(xarr, yarr, mode='mean', thresh=3, iter=5, order=3):
     elif mode == 'poly':
         # calculate the statistics and mask all of the mask with values above
         # these
-        it = interfit(xarr, yarr, function='poly', order=order)
-        it.interfit()
+        it = iterfit(xarr, yarr, function='poly', order=order)
+        it.iterfit()
         sarr = yarr - it(xarr)
     elif mode == 'mask':
         # mask the values
@@ -568,7 +568,7 @@ def findzeropoint(xarr, farr, swarr, sfarr, ws, dc=10, ndstep=20,
 
 
 def xcorfun(p, xarr, farr, swarr, sfarr, interptype, ws):
-    ws.coef=px
+    ws.coef=p
     # set the wavelegnth coverage
     warr = ws(xarr)
     # resample the artificial spectrum at the same wavelengths as the observed
@@ -689,27 +689,6 @@ def findxcor(xarr, farr, swarr, sfarr, ws, dcoef=None, ndstep=20, best=False,
     return nws
 
 
-def useRSSModel(xarr, rss, model,  gamma=0.0):
-    """Returns the wavelength solution using the RSS model for the spectrograph
-
-
-    """
-    d = rss.detector.xbin * rss.detector.pix_size * \
-        (xarr - rss.detector.get_xpixcenter())
-    alpha = rss.alpha()
-    beta = -rss.beta()
-    dbeta = -np.degrees(np.arctan(d / rss.camera.focallength))
-    y = 1e7 * rss.calc_wavelength(alpha, beta + dbeta, gamma=gamma)
-
-    # for these models, calculate the wavelength solution
-    ws = findfit(xarr, y, model=model)
-    try:
-        ws = findfit(xarr, y, model=model)
-    except Exception as e:
-        raise SpecError(e)
-    return ws
-
-
 def readlinelist(linelist):
     """Read in the line lists.  Determine what type of file it is.  The default
        is an ascii file with line and relative intensity.  The other types are
@@ -815,33 +794,6 @@ def readasciilinelist(linelist):
     return slines, sfluxes
 
 
-def getslitsize(slitname, config_file=''):
-    """Return the slit size for a given slit name"""
-    if slitname.strip() == 'PL0060N001':
-        return 0.6
-    if slitname.strip() == 'PL0100N001':
-        return 1.0
-    if slitname.strip() == 'PL0120P001':
-        return 1.2
-    if slitname.strip() == 'PL0125N001':
-        return 1.25
-    if slitname.strip() == 'PL0150N001':
-        return 1.5
-    if slitname.strip() == 'PL0200N001':
-        return 2.0
-    if slitname.strip() == 'PL0300N001':
-        return 3.0
-    if slitname.strip() == 'PL0400N001':
-        return 4.0
-
-    try:
-        return int(slitname.strip())
-    except:
-        pass
-    msg = 'Assuming a slit size of 1.0'
-    return 1.0
-
-
 def makesection(section):
     """Convert a section that is a list of coordinates into
        a list of indices
@@ -865,58 +817,6 @@ def vac2air(w):
        returns wavelength
     """
     return w / (1.0 + 2.735182E-4 + 131.4182 / w ** 2 + 2.76249E8 / w ** 4)
-
-def readspectrum(specfile, stype='continuum', error=True, cols=None,
-                 ftype=None):
-    """Given a specfile, read in the spectra and return a spectrum object
-
-       specfile--file containing the input spectra
-       error--include an error column in the creation of the spectrum object
-       cols--columns or column names for the wavelength, flux, and/or flux
-             error
-       ftype--type of file (ascii or fits)
-
-    """
-
-    # set the ftype for a fits file
-    if ftype is None:
-        if specfile[-5] == '.fits':
-            ftype = 'fits'
-        else:
-            ftype = 'ascii'
-
-    if ftype == 'ascii':
-        if error:
-            if cols is None:
-                cols = (0, 1, 2)
-            warr, farr, farr_err = np.loadtxt(
-                specfile, usecols=cols, unpack=True)
-            spectra = Spectrum.Spectrum(warr, farr, farr_err, stype=stype)
-        else:
-            if cols is None:
-                cols = (0, 1)
-            warr, farr = np.loadtxt(specfile, usecols=cols, unpack=True)
-            spectra = Spectrum.Spectrum(warr, farr, stype=stype)
-    elif ftype == 'fits':
-        message = 'Support for FITS files not provided yet'
-        raise SpecError(message)
-    else:
-        message = 'Support for %s files is not provided'
-        raise SpecError(message)
-
-    return spectra
-
-
-def writespectrum(spectra, outfile, error=False, ftype=None):
-    """Given a spectrum, write it out to a file"""
-    fout = saltio.openascii(outfile, 'w')
-    for i in range(spectra.nwave):
-        fout.write('%8.6f ' % spectra.wavelength[i])
-        fout.write('%8.6e ' % spectra.flux[i])
-        if error:
-            fout.write('%8.6e ' % spectra.var[i])
-        fout.write('\n')
-    fout.close()
 
 
 def crosslinematch(xarr, farr, sl, sf, ws, mdiff=20, wdiff=20, res=2, dres=0.1,
@@ -1017,3 +917,125 @@ def boxcar_smooth(spec, smoothwidth):
     smoothed = spec.flux.copy()
     smoothed[(kw / 2):-(kw / 2)] = np.convolve(spec.flux, kernel, mode='valid')
     return smoothed
+
+def getwsfromIS(k, ImageSolution, default_ws=None):
+    """From the imageSolution dictionary, find the ws which is nearest to
+       the value k
+
+    k: int
+         Row to return wavelength solution
+
+    ImageSolution: dict
+         Dictionary of wavelength solutions.  The keys in the dict should 
+         correspond to rows
+  
+    default_ws: None or ~WavelengthSolution.WavelengthSolution 
+         Value to return if no corresponding match in getwsfromIS
+
+    Returns
+    -------
+    ws: ~WavelengthSolution.WavelengthSolution 
+         Wavelength solution for row closest to k
+
+    """
+    if len(ImageSolution) == 0:
+        return default_ws
+    ISkeys = np.array(ImageSolution.keys())
+    ws = ImageSolution[ISkeys[abs(ISkeys - k).argmin()]]
+    if ws is None:
+        dist = abs(ISkeys[0] - k)
+        ws = ImageSolution[ISkeys[0]]
+        for i in ISkeys:
+            if ImageSolution[i] and abs(i - k) < dist:
+                dist = abs(i - k)
+                ws = ImageSolution[i]
+    return ws
+
+def arc_straighten(data, istart, ws, rstep=1):
+    """For a given image, assume that the line given by istart is the fiducial and then calculate
+       the transformation between each line and that line in order to straighten the arc
+
+       Parameters
+       ----------
+       data: ~numpy.ndarray
+           Array contianing arc lines 
+
+       istart: int
+           Row to use as the default row
+
+       ws: ~WavelengthSolution.WavelengthSolution 
+         Initial Wavelength solution
+
+       rstep: int
+         Number of steps to take between each wavelength solution
+
+
+       Returns
+       -------
+       ImageSolution: dict
+           Dict contain a Wavelength solution for each row
+    """
+
+    ImageSolution = {}
+    # now step around the central row
+    k = istart
+    oxarr = np.arange(len(data[k]))
+    ofarr = data[k]
+
+    ws.xarr = oxarr
+    ws.warr = oxarr
+    ws.fit()
+    ImageSolution[k] = ws
+
+    for i in range(rstep, int(0.5 * len(data)), rstep):
+        for k in [istart - i, istart + i]:
+            lws = getwsfromIS(k, ImageSolution)
+            xarr = np.arange(len(data[k]))
+            farr = data[k]
+            nws = fitxcor(
+                xarr,
+                farr,
+                oxarr,
+                ofarr,
+                lws,
+                interptype='interp')
+            ImageSolution[k] = nws
+
+    return ImageSolution
+
+
+def wave_map(data, iws):
+    """Produce a wave map where each pixel in data corresponds to a wavelength
+
+    Parameters
+    ----------
+    data: ~numpy.ndarray
+        Array contianing arc lines 
+
+    ImageSolution: dict
+        Dict contain a Wavelength solution for each row
+
+    Returns
+    -------
+    data: ~numpy.ndarray
+        Array contianing wavelengths for each pixel
+    
+    Notes
+    -----
+    At this time, `iws` must have an entry for every row.
+
+    """
+    # set up what we will need
+    wave_map = np.zeros_like(data)
+    keys = np.array(iws.keys())
+    xarr = np.arange(data.shape[1])
+
+    #now run through each and add to the array
+    for i in range(keys.min(), keys.max()):
+        if i in keys:
+           wave_map[i,:]=iws[i](xarr)
+
+    #TODO interpolate between empty rows
+
+    return wave_map
+
