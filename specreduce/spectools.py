@@ -1039,3 +1039,104 @@ def wave_map(data, iws):
 
     return wave_map
 
+def ws_match_lines(xarr, flux, ws, dw=1.0, lw=None,
+                  kernal_size=3):
+    """Match lines given a wavelength solution
+
+    Parameters
+    ----------
+    xarr: ~numpy.ndarray
+       Continuus array of x positions
+
+    xarr: ~numpy.ndarray
+       Continuus array of x positions
+
+    ws: ~WavelengthSolution
+       Wavelength solution including line list
+
+    dw: float
+       Area around line to search for peaks in wavelength space
+
+    lw: ~numpy.ndarray
+       Line list of wavelengths to be matched
+
+    kernal_size: int
+       Kernal size used in detecting lines 
+
+    Returns
+    -------
+    matches: ~numpy.ndarray
+       Array of matched x-positions and wavelengths
+    
+
+    """
+   
+
+    xp = detect_lines(xarr, flux, kernal_size=kernal_size, center=True)
+    wp = ws(xp)
+
+    # now find all the potential matches
+    if lw is None:
+        lw = ws.wavelength
+    match=[]
+    for w in lw:
+        m_i = np.where(abs(wp-w)<dw)[0]
+        for i in m_i:
+            match.append([xp[i], wp[i],w])
+
+    return np.array(match)
+
+from astropy import modeling as mod
+from astropy import stats
+
+def match_probability(a, b, m_init=mod.models.Polynomial1D(1),
+                      fitter=mod.fitting.LinearLSQFitter(),
+                      tol=0.01, n_iter=5):
+    """Determine the probability that two lists match.   This is determine
+    by fitting a transformation to the two lists and calculating the 
+    likelihood of each point fit to that model. The likelihood is 
+    calculated from the $\Chi^2$ for each point.  
+    
+    Parameters
+    ----------
+    a: ~numpy.ndarray
+        Array of matched values
+        
+    b: ~numpy.ndarry
+        Array of matched values
+        
+    m_init: ~astropy.models.modelling
+        Model describing the transform between the two arrays
+        
+    fitter: ~astropy.models.fitting
+        Fitter to be usef for the model
+
+    tolerance: float
+        Tolerance for the fit
+        
+    n_inter: int
+        Maximum number of interations
+        
+    Returns
+    -------
+    m: ~astropy.models.modelling
+        Model describing the transform between the two arrays
+        
+    prob: ~numpy.ndarray
+        Model with the likelihood of each point fitting the relationship 
+    """
+    if a.shape!=b.shape:
+        raise ValueError('Arrays are of different shapes')
+
+    #set up the probability array
+    prob = np.ones_like(a)
+
+    for i in range(n_iter):
+        m = fitter(m_init, a, b, weights=prob)
+        rms = np.average((b-m(a))**2, weights=prob)**0.5
+        if rms < tol: break
+
+        #caculate the likelihood
+        chi = ((b-m(a))/rms)**2
+        prob = np.exp(-chi/2)
+    return m, prob
